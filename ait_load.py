@@ -88,7 +88,7 @@ class AITPatch:
                 self.ait_model = None
                 print("unloaded AIT")
 
-class AITLoader:
+class AIT_Unet_Loader:
     @classmethod
     def INPUT_TYPES(s):
         return {"required": { "model": ("MODEL", ),
@@ -97,7 +97,7 @@ class AITLoader:
     RETURN_TYPES = ("MODEL",)
     FUNCTION = "load_ait"
 
-    CATEGORY = "_for_testing"
+    CATEGORY = "loaders/AIT"
 
     def load_ait(self, model, ait_name):
         ait_path = folder_paths.get_full_path("ait", ait_name)

@@ -1,5 +1,7 @@
-from .ait_load import AITLoader
+from .ait_load import AIT_Unet_Loader
 
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "AITLoader":"AITLoader",
+NODE_CLASS_MAPPINGS = {
+    "AIT_Unet_Loader":AIT_Unet_Loader,
 }
+
+print('\033[34mAIT Nodes: \033[92mLoaded\033[0m')
