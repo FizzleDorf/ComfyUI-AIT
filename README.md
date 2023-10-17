@@ -10,7 +10,7 @@ To install the repo, simply git bash inside the custom nodes directory and use t
 You need to apply the patch located in the patch folder. Here are the steps to do so: 
   - Make sure you are on the latest version of ComfyUI (`git pull` the root folder).
   - paste the patch (named `0001-AIT-Compile-support.patch`) into the ComfyUI root folder.
-  - enter `git patch 0001-AIT-Compile-support.patch` into git bash.
+  - enter `git apply 0001-AIT-Compile-support.patch` into git bash.
 *Note:this is temporarily in place until this is included in base comfy* 
 
 ## Modules
