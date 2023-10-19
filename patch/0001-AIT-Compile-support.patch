@@ -1,24 +1,24 @@
-From 6e4aeb5f2f5261b87fe6d736f2fabd3b14d95d0b Mon Sep 17 00:00:00 2001
-From: comfyanonymous <comfyanonymous@protonmail.com>
-Date: Wed, 11 Oct 2023 01:45:00 -0400
-Subject: [PATCH] AIT Compile support.
+From c05ed9e9f8d2fd620d482073eabf5e61eede68d4 Mon Sep 17 00:00:00 2001
+From: asagi4 <130366179+asagi4@users.noreply.github.com>
+Date: Thu, 12 Oct 2023 19:21:48 +0300
+Subject: [PATCH] AIT compilation support
 
 ---
- ait_convert.py                                |  98 +++++++++
+ ait_convert.py                                |  94 +++++++++++++
  comfy/cli_args.py                             |   2 +
- comfy/ldm/modules/attention.py                | 200 +++++++++++-------
- .../modules/diffusionmodules/openaimodel.py   | 110 ++++++----
- comfy/ldm/modules/diffusionmodules/util.py    |  85 ++++++--
- comfy/ops.py                                  |  44 ++++
- 6 files changed, 400 insertions(+), 139 deletions(-)
+ comfy/ldm/modules/attention.py                | 123 +++++++++++++++++-
+ .../modules/diffusionmodules/openaimodel.py   |  97 +++++++-------
+ comfy/ldm/modules/diffusionmodules/util.py    |  85 +++++++++---
+ comfy/ops.py                                  |  44 +++++++
+ 6 files changed, 373 insertions(+), 72 deletions(-)
  create mode 100644 ait_convert.py
 
 diff --git a/ait_convert.py b/ait_convert.py
 new file mode 100644
-index 0000000..0e9fe53
+index 0000000..4b3fdd0
 --- /dev/null
 +++ b/ait_convert.py
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,94 @@
 +import torch
 +import comfy.cli_args
 +comfy.cli_args.enable_ait = True
@@ -32,11 +32,12 @@ index 0000000..0e9fe53
 +
 +sys.setrecursionlimit(10000) #Needed for SDXL
 +
++if len(sys.argv) < 3:
++    print(f"Usage: {sys.argv[0]} ckpt_path unet_name")
++    sys.exit(1)
 +
-+ckpt_path = "models/checkpoints/sd_xl_base_1.0_0.9vae.safetensors"
-+# ckpt_path = "models/checkpoints/cardosAnime_v20.safetensors"
-+
-+unet_name = "SDXL"
++ckpt_path = sys.argv[1]
++unet_name = sys.argv[2]
 +
 +#NOTE: to get CUDA working with cmake/ms build tools on windows copy the contents of:
 +# C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\extras\visual_studio_integration\MSBuildExtensions
@@ -106,105 +107,40 @@ index 0000000..0e9fe53
 +
 +mark_output(Y)
 +
-+# print(Y)
-+
 +target = detect_target(
 +    use_fp16_acc=True, convert_conv_to_gemm=True
 +)
 +
-+# print(target)
-+
-+#print(params_ait.keys())
 +model_name = "unet_1"
 +compile_model(Y, target, "./optimize/{}".format(unet_name), model_name)
 diff --git a/comfy/cli_args.py b/comfy/cli_args.py
-index 35d4416..0d647ea 100644
+index d865576..1080835 100644
 --- a/comfy/cli_args.py
 +++ b/comfy/cli_args.py
-@@ -105,3 +105,5 @@ if args.windows_standalone_build:
+@@ -107,3 +107,5 @@ if args.windows_standalone_build:
  
  if args.disable_auto_launch:
      args.auto_launch = False
 +
 +enable_ait = False
 diff --git a/comfy/ldm/modules/attention.py b/comfy/ldm/modules/attention.py
-index fcae6b6..553f799 100644
+index 9cd14a5..ac726e7 100644
 --- a/comfy/ldm/modules/attention.py
 +++ b/comfy/ldm/modules/attention.py
-@@ -91,63 +91,6 @@ def zero_module(module):
+@@ -91,9 +91,6 @@ def zero_module(module):
      return module
  
  
 -def Normalize(in_channels, dtype=None, device=None):
 -    return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True, dtype=dtype, device=device)
 -
--
--class SpatialSelfAttention(nn.Module):
--    def __init__(self, in_channels):
--        super().__init__()
--        self.in_channels = in_channels
--
--        self.norm = Normalize(in_channels)
--        self.q = torch.nn.Conv2d(in_channels,
--                                 in_channels,
--                                 kernel_size=1,
--                                 stride=1,
--                                 padding=0)
--        self.k = torch.nn.Conv2d(in_channels,
--                                 in_channels,
--                                 kernel_size=1,
--                                 stride=1,
--                                 padding=0)
--        self.v = torch.nn.Conv2d(in_channels,
--                                 in_channels,
--                                 kernel_size=1,
--                                 stride=1,
--                                 padding=0)
--        self.proj_out = torch.nn.Conv2d(in_channels,
--                                        in_channels,
--                                        kernel_size=1,
--                                        stride=1,
--                                        padding=0)
--
--    def forward(self, x):
--        h_ = x
--        h_ = self.norm(h_)
--        q = self.q(h_)
--        k = self.k(h_)
--        v = self.v(h_)
--
--        # compute attention
--        b,c,h,w = q.shape
--        q = rearrange(q, 'b c h w -> b (h w) c')
--        k = rearrange(k, 'b c h w -> b c (h w)')
--        w_ = torch.einsum('bij,bjk->bik', q, k)
--
--        w_ = w_ * (int(c)**(-0.5))
--        w_ = torch.nn.functional.softmax(w_, dim=2)
--
--        # attend to values
--        v = rearrange(v, 'b c h w -> b c (h w)')
--        w_ = rearrange(w_, 'b i j -> b j i')
--        h_ = torch.einsum('bij,bjk->bik', v, w_)
--        h_ = rearrange(h_, 'b c (h w) -> b c h w', h=h)
--        h_ = self.proj_out(h_)
--
--        return x+h_
--
--
- class CrossAttentionBirchSan(nn.Module):
-     def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0., dtype=None, device=None, operations=comfy.ops):
-         super().__init__()
-@@ -489,19 +432,119 @@ class CrossAttentionPytorch(nn.Module):
- 
+ def attention_basic(q, k, v, heads, mask=None):
+     h = heads
+     scale = (q.shape[-1] // heads) ** -0.5
+@@ -343,6 +340,105 @@ class CrossAttention(nn.Module):
          return self.to_out(out)
  
--if model_management.xformers_enabled():
--    print("Using xformers cross attention")
--    CrossAttention = MemoryEfficientCrossAttention
--elif model_management.pytorch_attention_enabled():
--    print("Using pytorch cross attention")
--    CrossAttention = CrossAttentionPytorch
+ 
 +if comfy.ops.ENABLE_AIT:
 +    from aitemplate.compiler import ops
 +    from aitemplate.frontend import nn
@@ -304,29 +240,10 @@ index fcae6b6..553f799 100644
 +            proj = ops.reshape()(proj, [bs, -1, nheads * d])
 +            return proj
 +
- else:
--    if args.use_split_cross_attention:
--        print("Using split optimization for cross attention")
--        CrossAttention = CrossAttentionDoggettx
-+    if model_management.xformers_enabled():
-+        print("Using xformers cross attention")
-+        CrossAttention = MemoryEfficientCrossAttention
-+    elif model_management.pytorch_attention_enabled():
-+        print("Using pytorch cross attention")
-+        CrossAttention = CrossAttentionPytorch
-     else:
--        print("Using sub quadratic optimization for cross attention, if you have memory or speed issues try using: --use-split-cross-attention")
--        CrossAttention = CrossAttentionBirchSan
-+        if args.use_split_cross_attention:
-+            print("Using split optimization for cross attention")
-+            CrossAttention = CrossAttentionDoggettx
-+        else:
-+            print("Using sub quadratic optimization for cross attention, if you have memory or speed issues try using: --use-split-cross-attention")
-+            CrossAttention = CrossAttentionBirchSan
- 
- 
  class BasicTransformerBlock(nn.Module):
-@@ -654,7 +697,7 @@ class SpatialTransformer(nn.Module):
+     def __init__(self, dim, n_heads, d_head, dropout=0., context_dim=None, gated_ff=True, checkpoint=True,
+                  disable_self_attn=False, dtype=None, device=None, operations=comfy.ops):
+@@ -493,7 +589,7 @@ class SpatialTransformer(nn.Module):
              context_dim = [context_dim] * depth
          self.in_channels = in_channels
          inner_dim = n_heads * d_head
@@ -335,7 +252,7 @@ index fcae6b6..553f799 100644
          if not use_linear:
              self.proj_in = operations.Conv2d(in_channels,
                                       inner_dim,
-@@ -682,12 +725,20 @@ class SpatialTransformer(nn.Module):
+@@ -521,12 +617,20 @@ class SpatialTransformer(nn.Module):
          # note: if no context is given, cross-attention defaults to self-attention
          if not isinstance(context, list):
              context = [context] * len(self.transformer_blocks)
@@ -358,7 +275,7 @@ index fcae6b6..553f799 100644
          if self.use_linear:
              x = self.proj_in(x)
          for i, block in enumerate(self.transformer_blocks):
-@@ -695,7 +746,12 @@ class SpatialTransformer(nn.Module):
+@@ -534,7 +638,12 @@ class SpatialTransformer(nn.Module):
              x = block(x, context=context[i], transformer_options=transformer_options)
          if self.use_linear:
              x = self.proj_out(x)
@@ -373,7 +290,7 @@ index fcae6b6..553f799 100644
              x = self.proj_out(x)
          return x + x_in
 diff --git a/comfy/ldm/modules/diffusionmodules/openaimodel.py b/comfy/ldm/modules/diffusionmodules/openaimodel.py
-index b42637c..1b5f0dd 100644
+index bf58a40..303c664 100644
 --- a/comfy/ldm/modules/diffusionmodules/openaimodel.py
 +++ b/comfy/ldm/modules/diffusionmodules/openaimodel.py
 @@ -17,6 +17,13 @@ from ..attention import SpatialTransformer
@@ -390,7 +307,7 @@ index b42637c..1b5f0dd 100644
  class TimestepBlock(nn.Module):
      """
      Any module where forward() takes timestep embeddings as a second argument.
-@@ -80,19 +87,25 @@ class Upsample(nn.Module):
+@@ -80,19 +87,20 @@ class Upsample(nn.Module):
              self.conv = operations.conv_nd(dims, self.channels, self.out_channels, 3, padding=padding, dtype=dtype, device=device)
  
      def forward(self, x, output_shape=None):
@@ -401,12 +318,7 @@ index b42637c..1b5f0dd 100644
 -                shape[1] = output_shape[3]
 -                shape[2] = output_shape[4]
 +        if comfy.ops.ENABLE_AIT:
-+            if output_shape is None:
-+                x = nn.Upsampling2d(scale_factor=2.0, mode="nearest")(x)
-+            else:
-+                b, h, w, c = output_shape()
-+                b_, h_, w_, c_ = x.shape()
-+                x = nn.Upsampling2d(scale_factor=2.0, mode="nearest")(x, Tensor([b_, h, w, c_]))
++            x = nn.Upsampling2d(scale_factor=2.0, mode="nearest")(x)
          else:
 -            shape = [x.shape[2] * 2, x.shape[3] * 2]
 -            if output_shape is not None:
@@ -428,7 +340,7 @@ index b42637c..1b5f0dd 100644
          if self.use_conv:
              x = self.conv(x)
          return x
-@@ -122,7 +135,6 @@ class Downsample(nn.Module):
+@@ -122,7 +130,6 @@ class Downsample(nn.Module):
              self.op = avg_pool_nd(dims, kernel_size=stride, stride=stride)
  
      def forward(self, x):
@@ -436,7 +348,7 @@ index b42637c..1b5f0dd 100644
          return self.op(x)
  
  
-@@ -168,8 +180,8 @@ class ResBlock(TimestepBlock):
+@@ -168,8 +175,8 @@ class ResBlock(TimestepBlock):
          self.use_scale_shift_norm = use_scale_shift_norm
  
          self.in_layers = nn.Sequential(
@@ -447,7 +359,7 @@ index b42637c..1b5f0dd 100644
              operations.conv_nd(dims, channels, self.out_channels, 3, padding=1, dtype=dtype, device=device),
          )
  
-@@ -185,19 +197,18 @@ class ResBlock(TimestepBlock):
+@@ -185,19 +192,18 @@ class ResBlock(TimestepBlock):
              self.h_upd = self.x_upd = nn.Identity()
  
          self.emb_layers = nn.Sequential(
@@ -472,7 +384,7 @@ index b42637c..1b5f0dd 100644
          )
  
          if self.out_channels == channels:
-@@ -230,9 +241,12 @@ class ResBlock(TimestepBlock):
+@@ -230,9 +236,12 @@ class ResBlock(TimestepBlock):
              h = in_conv(h)
          else:
              h = self.in_layers(x)
@@ -488,28 +400,7 @@ index b42637c..1b5f0dd 100644
          if self.use_scale_shift_norm:
              out_norm, out_rest = self.out_layers[0], self.out_layers[1:]
              scale, shift = th.chunk(emb_out, 2, dim=1)
-@@ -316,6 +330,7 @@ class UNetModel(nn.Module):
-         adm_in_channels=None,
-         transformer_depth_middle=None,
-         device=None,
-+        dtype=None,
-         operations=comfy.ops,
-     ):
-         super().__init__()
-@@ -370,19 +385,19 @@ class UNetModel(nn.Module):
-         self.conv_resample = conv_resample
-         self.num_classes = num_classes
-         self.use_checkpoint = use_checkpoint
--        self.dtype = th.float16 if use_fp16 else th.float32
--        self.dtype = th.bfloat16 if use_bf16 else self.dtype
-+        if dtype is not None:
-+            self.dtype = dtype
-+        else:
-+            self.dtype = th.float16 if use_fp16 else th.float32
-+            self.dtype = th.bfloat16 if use_bf16 else self.dtype
-         self.num_heads = num_heads
-         self.num_head_channels = num_head_channels
-         self.num_heads_upsample = num_heads_upsample
+@@ -376,11 +385,8 @@ class UNetModel(nn.Module):
          self.predict_codebook_ids = n_embed is not None
  
          time_embed_dim = model_channels * 4
@@ -523,7 +414,7 @@ index b42637c..1b5f0dd 100644
  
          if self.num_classes is not None:
              if isinstance(self.num_classes, int):
-@@ -393,11 +408,7 @@ class UNetModel(nn.Module):
+@@ -391,11 +397,7 @@ class UNetModel(nn.Module):
              elif self.num_classes == "sequential":
                  assert adm_in_channels is not None
                  self.label_emb = nn.Sequential(
@@ -536,7 +427,7 @@ index b42637c..1b5f0dd 100644
                  )
              else:
                  raise ValueError()
-@@ -586,13 +597,14 @@ class UNetModel(nn.Module):
+@@ -584,13 +586,14 @@ class UNetModel(nn.Module):
                  self._feature_size += ch
  
          self.out = nn.Sequential(
@@ -555,7 +446,7 @@ index b42637c..1b5f0dd 100644
              operations.conv_nd(dims, model_channels, n_embed, 1, dtype=self.dtype, device=device),
              #nn.LogSoftmax(dim=1)  # change to cross_entropy and produce non-normalized logits
          )
-@@ -606,7 +618,10 @@ class UNetModel(nn.Module):
+@@ -604,7 +607,10 @@ class UNetModel(nn.Module):
          :param y: an [N] Tensor of labels, if class-conditional.
          :return: an [N x C x ...] Tensor of outputs.
          """
@@ -567,7 +458,7 @@ index b42637c..1b5f0dd 100644
          transformer_options["current_index"] = 0
          transformer_patches = transformer_options.get("patches", {})
  
-@@ -614,14 +629,13 @@ class UNetModel(nn.Module):
+@@ -612,14 +618,13 @@ class UNetModel(nn.Module):
              self.num_classes is not None
          ), "must specify y if and only if the model is class-conditional"
          hs = []
@@ -584,7 +475,7 @@ index b42637c..1b5f0dd 100644
          for id, module in enumerate(self.input_blocks):
              transformer_options["block"] = ("input", id)
              h = forward_timestep_embed(module, h, emb, context, transformer_options)
-@@ -650,14 +664,18 @@ class UNetModel(nn.Module):
+@@ -648,14 +653,18 @@ class UNetModel(nn.Module):
                  for p in patch:
                      h, hsp = p(h, hsp, transformer_options)
  
@@ -771,5 +662,5 @@ index 610d545..6d8b077 100644
  def use_comfy_ops(device=None, dtype=None): # Kind of an ugly hack but I can't think of a better way
      old_torch_nn_linear = torch.nn.Linear
 -- 
-2.37.1.windows.1
+2.39.3
 
