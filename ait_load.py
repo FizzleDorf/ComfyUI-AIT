@@ -106,7 +106,60 @@ class AIT_Unet_Loader:
         model_ait.set_model_unet_function_wrapper(patch)
         return (model_ait,)
 
+class AIT_VAE_Encode_Loader:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": { "pixels": ("IMAGE", ),
+                              "vae": ("VAE",),
+                              "ait_name": (folder_paths.get_filename_list("ait"), ),
+                             }}
+    RETURN_TYPES = ("LATENT",)
+    FUNCTION = "load_ait"
 
-NODE_CLASS_MAPPINGS = {
-  "AITLoader": AITLoader,
-}
+    CATEGORY = "loaders/AIT"
+
+    @staticmethod
+    def vae_encode_crop_pixels(self, pixels):
+        x = (pixels.shape[1] // 8) * 8
+        y = (pixels.shape[2] // 8) * 8
+        if pixels.shape[1] != x or pixels.shape[2] != y:
+            x_offset = (pixels.shape[1] % 8) // 2
+            y_offset = (pixels.shape[2] % 8) // 2
+            pixels = pixels[:, x_offset:x + x_offset, y_offset:y + y_offset, :]
+        return pixels
+
+    def load_ait(self, pixels, ait_name, vae):
+        resolution = max(pixels.shape[1], pixels.shape[2])
+        model_type = "vae_encode"
+
+        # Clear any previously loaded VAE models
+        if len(AITemplate.vae.keys()) > 0:
+            to_delete = list(AITemplate.vae.keys())
+            for key in to_delete:
+                del AITemplate.vae[key]
+
+        # Load the VAE module using the provided "ait_name"
+        module_filename = folder_paths.get_full_path("ait", ait_name)
+        if module_filename not in AITemplate.vae:
+            AITemplate.vae[module_filename] = AITemplate.loader.load_module(module_filename)
+
+        AITemplate.vae[module_filename] = AITemplate.loader.apply_vae(
+            aitemplate_module=AITemplate.vae[module_filename],
+            vae=AITemplate.loader.compvis_vae(vae.first_stage_model.state_dict()),
+            encoder=True,
+        )
+
+        # Perform any required image processing here
+        pixels = self.vae_encode_crop_pixels(pixels)
+        pixels = pixels[:, :, :, :3]
+        pixels = pixels.movedim(-1, 1)
+        pixels = 2. * pixels - 1.
+
+        samples = vae_inference(AITemplate.vae[module_filename], pixels, encoder=True)
+        samples = samples.cpu()
+
+        # Unload the module after inference
+        del AITemplate.vae[module_filename]
+        torch.cuda.empty_cache()
+
+        return ({"samples": samples},)
