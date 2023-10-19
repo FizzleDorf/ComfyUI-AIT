@@ -108,5 +108,5 @@ class AIT_Unet_Loader:
 
 
 NODE_CLASS_MAPPINGS = {
-  "AITLoader": AITLoader,
+  "AITLoader": AIT_Unet_Loader,
 }
