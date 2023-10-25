@@ -76,7 +76,7 @@ class AITPatch:
         else:
             xc = x
         context = params["c"].get("c_crossattn")
-        y = params["c"].get("c_adm")
+        y = params["c"].get("y")
         control = params["c"].get("control")
         transformer_options = params["c"].get("transformer_options")
         return self.ait_model.apply_model(x, t, context, y, control, transformer_options).float()
