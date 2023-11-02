@@ -69,22 +69,26 @@ class AITPatch:
             self.ait_model.set_weights(sd)
 
         c_concat = params["c"].get("c_concat", None)
+
+        # The BaseModel instance
+        inner_model = self.model.model
         x = params["input"]
-        t = params["timestep"]
+        sigma = params["timestep"]
+        xc = inner_model.model_sampling.calculate_input(sigma, x)
+        t = inner_model.model_sampling.timestep(sigma).float()
         if c_concat is not None:
-            xc = torch.cat([x] + [c_concat], dim=1)
-        else:
-            xc = x
+            xc = torch.cat([xc] + [c_concat], dim=1)
         context = params["c"].get("c_crossattn")
         y = params["c"].get("y")
         control = params["c"].get("control")
         transformer_options = params["c"].get("transformer_options")
-        return self.ait_model.apply_model(x, t, context, y, control, transformer_options).float()
+        out = self.ait_model.apply_model(xc, t, context, y, control, transformer_options)
+        return inner_model.model_sampling.calculate_denoised(sigma, out, x)
 
     def to(self, a):
         if self.ait_model is not None:
             if a == torch.device("cpu"):
-                self.ait_model.unload_module()
+                self.ait_model.inner_model.unload_module()
                 self.ait_model = None
                 print("unloaded AIT")
 
