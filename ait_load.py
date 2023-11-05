@@ -107,6 +107,7 @@ class AIT_Unet_Loader:
         return (model_ait,)
 
 
+
 NODE_CLASS_MAPPINGS = {
   "AIT_Unet_Loader": AIT_Unet_Loader,
 }
