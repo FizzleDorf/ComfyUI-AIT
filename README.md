@@ -4,18 +4,17 @@ A ComfyUI implementation of Facebook Meta's [AITemplate](https://github.com/face
 
 ## Installation
 
-To install the repo, simply git bash inside the custom nodes directory and use the command: 
-`git clone https://github.com/FizzleDorf/ComfyUI-AIT.git`
+This repo can be downloaded using [ComfyUI manager](https://github.com/ltdrdata/ComfyUI-Manager).
 
-You need to apply the patch located in the patch folder. Here are the steps to do so: 
-  - Make sure you are on the latest version of ComfyUI (`git pull` the root folder).
-  - paste the patch (named `0001-AIT-Compile-support.patch`) into the ComfyUI root folder.
-  - enter `git apply 0001-AIT-Compile-support.patch` into git bash.
-*Note:this is temporarily in place until this is included in base comfy* 
+To install the repo manually, simply git bash inside the `custom_nodes` directory and use the command `git clone https://github.com/FizzleDorf/ComfyUI-AIT.git`
+
+Install the requirements using `pip install -r requirements.txt` if you cloned your ComfyUI install. If you are using a virtual environment, make sure it's activated.
+
+For Windows users using the packeged ComfyUI install, use `.\python_embed\python.exe -s -m pip install -r requirements.txt` while pathed in the ComfyUI-AIT directory.
+
 
 ## Modules
 
-You can find already compiled modules [here](https://huggingface.co/Fizzledorf/AITemplateXL) otherwise you can compile your own modules (requires sm80 or higher NVIDIA GPU). *An updated wheel will be provided for Windows modules.*
+You can find already [compiled modules here](https://huggingface.co/Fizzledorf/AITemplateXL) otherwise you can compile your own modules (requires sm80 or higher NVIDIA GPU). *An updated wheel will be provided for Windows modules.*
 Place your downloaded or compiles Modules in the ComfyUI/models/ait directory.
 While in ComfyUI, simply hook up the AIT_Unet_Loader to your workflow and select a module that is equal to or larger than the resolution you are generating at.
-
