@@ -9,7 +9,6 @@ This repo can be downloaded using [ComfyUI manager](https://github.com/ltdrdata/
 To install the repo manually, simply git bash inside the `custom_nodes` directory and use the command `git clone https://github.com/FizzleDorf/ComfyUI-AIT.git`
 
 ### Linux
-*This is for compilation only, you can do the Linux install for inference only*
 - open a terminal pathed to the current folder and use `git clone --recursive https://github.com/facebookincubator/AITemplate`.
 - path to `cd python`.
 - run `python setup.py bdist_wheel`.
