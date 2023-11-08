@@ -2,6 +2,8 @@
 
 A [ComfyUI](https://github.com/comfyanonymous/ComfyUI) implementation of Facebook Meta's [AITemplate](https://github.com/facebookincubator/AITemplate) repo for faster inference using cpp/cuda. The old AIT repo is still available for reference. You can find it [here](https://github.com/FizzleDorf/AIT). The node in the UI is located under loaders->AIT. This new repo is behiond but is a much more stable foundation to keep AIT online. *Please be patient as the repo will eventually include the same features as before.*
 
+-----
+
 ## Installation
 
 This repo can be downloaded using [ComfyUI manager](https://github.com/ltdrdata/ComfyUI-Manager).
@@ -25,6 +27,8 @@ To install the repo manually, simply git bash inside the `custom_nodes` director
 - **If you cloned your ComfyUI install and you are using a virtual environment, make sure it's activated before installing the wheel.**
 - `pip install dist/*.whl --force-reinstall` for cloned comfy installs or `.\python_embed\python.exe -s -m pip install` for packaged comfy.
 - copy and paste the `3rdparty` directory to the `Lib` directory of your venv or python install.
+
+-----
 
 ## Modules
 
