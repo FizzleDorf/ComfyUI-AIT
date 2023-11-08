@@ -28,6 +28,10 @@ To install the repo manually, simply git bash inside the `custom_nodes` director
 
 ## Modules
 
-You can find already [compiled modules here](https://huggingface.co/Fizzledorf/AITemplateXL) otherwise you can compile your own modules (requires sm80 or higher NVIDIA GPU). *An updated wheel will be provided for Windows modules.*
+You can find already [compiled modules here](https://huggingface.co/Fizzledorf/AITemplateXL) otherwise you can compile your own modules (requires sm80 or higher NVIDIA GPU). 
+
+*a bundle for Windows compilation is included with this repo. See Windows installation instructions.*
+
 Place your downloaded or compiles Modules in the ComfyUI/models/ait directory.
+
 While in ComfyUI, simply hook up the AIT_Unet_Loader to your workflow and select a module that is equal to or larger than the resolution you are generating at.
